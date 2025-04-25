@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 ## Project Overview
 
-I analyzed the NYPD Shooting Incident Data for NYC and looked at the characteristics of the perpetrators of the murder victims and the characteristics of the murder victims. I also looked at which boroughs have the most shootings and which months out of the year have the most shootings. I then applied a linear model to determine if there was an overall increase or decrease in shootings and murders. 
+I analyzed the NYPD Shooting Incident Data for NYC and looked at the characteristics of the perpetrators of murder victims and the characteristics of murder victims. I also looked at which boroughs have the most shootings and which months out of the year have the most shootings. I then applied a linear model to determine if there was an overall increase or decrease in shootings and murders. 
 
 
 ## Data Description
@@ -117,6 +117,9 @@ year_lst = c(min_year:max_year)
 ```
 
 ## Perpetrator Analysis
+
+First, I looked at the percentage of perpetrators unknown verse identified of shootings that are classified as murders. Then I looked at the demographic characteristics of the perpetrators of shootings classified as murders such as age, sex, and race.
+
 ```{r perp_analysis}
 
 # grouping data by identified or unknown and totaling the number of murders
@@ -191,6 +194,8 @@ ggplot(data = group_murders_year_PERP_RACE, mapping = aes(x = year, y = murders)
 
 ## Victim Analysis
 
+Next, I looked at the demographic characteristics of victims of shootings classified as murders such as age, sex, and race.
+
 ```{r vic_analysis}
 
 # grouping data by age range and totaling the number of murders
@@ -242,16 +247,16 @@ ggplot(data = group_murders_year_VIC_RACE, mapping = aes(x = year, y = murders))
 
 ## Overall Trend
 
-```{r trends}
-group_by_boro_year <- data %>%
-  group_by(BORO, year) %>%
-  summarise(shootings = n(), .groups = "drop_last")
+Then I looked at the number of shootings by borough and looked at the seasonality of shootings. Lastly, I applied linear regression models to shootings and murders by year to look at the overall trend and see if either model was statistically significant.
 
+```{r trends}
+# group by month to look at seasonality of shootings
 group_total_month <- data %>%
   group_by(month) %>%
   summarise(shootings = n(), .groups = "drop_last") %>%
   mutate(avg_shootings_per_month = shootings / n_distinct(data$year))
 
+# plot the seasonality trends for shootings
 ggplot(data = group_total_month, mapping = aes(x = month, y = avg_shootings_per_month)) + 
   geom_bar(stat = "identity", fill = 'steelblue') +
   labs(title = 'Average Shootings per Month for all NYC Boroughs', x = 'Month', y = 'Average shootings per month') +
@@ -270,35 +275,49 @@ ggplot(data = group_total_month, mapping = aes(x = month, y = avg_shootings_per_
       '12' = "Dec"
     )) + theme(plot.title = element_text(hjust = 0.5, vjust = 1))
 
+# group by borough and year to look at which borough has the most shootings per year
+group_by_boro_year <- data %>%
+  group_by(BORO, year) %>%
+  summarise(shootings = n(), .groups = "drop_last")
+
+# plot the breakout of shootings by borough
 ggplot(data = group_by_boro_year, mapping = aes(x = year, y = shootings)) + 
   geom_line(aes(group=BORO, color=BORO)) +
   geom_point(aes(color=BORO)) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
   scale_x_continuous(labels=year_lst,breaks=year_lst) + 
   labs(title = 'Number of Shootings by Borough per Year', x = 'Year', 
-       y = 'Number of Shootings', color = 'Boroughs') + theme(plot.title = element_text(hjust = 0.5, vjust = 1))
+       y = 'Number of Shootings', color = 'Boroughs') + 
+  theme(plot.title = element_text(hjust = 0.5, vjust = 1))
 
+# group shootings per year
 group_shootings_year <- data %>%
   group_by(year) %>%
   summarise(shootings = n(), .groups = "drop_last")
 
+# group murders per year
 group_murders_year <- data %>%
   group_by(year) %>%
   summarise(murders = sum(STATISTICAL_MURDER_FLAG == 'TRUE'), .groups = "drop_last")
 
+# linear regression of shootings per year
 mod_shootings <- lm(shootings ~ year, data = group_shootings_year)
 summary(mod_shootings)
 shootings_by_year_w_pred <- group_shootings_year %>% mutate(pred_shooting = predict(mod_shootings))
 
+# linear regression of murders per year
 mod_murder <- lm(murders ~ year, data = group_murders_year)
 summary(mod_murder)
 murders_by_year_w_pred <- group_murders_year %>% mutate(pred_murder = predict(mod_murder))
 
+# combine the shootings and murders linear regression models
 combined_by_year_model <- shootings_by_year_w_pred %>%
   full_join(murders_by_year_w_pred)
 
+# set legend colors for the visualization
 legend_colors <- c('Actual Shootings' = 'darkred', 'Predicted Shootings' = 'darkorange', 'Actual Murders' = 'darkslateblue', 'Predicted Murders' = 'deepskyblue')
 
+# plot both the shootings and murders linear regression models
 combined_by_year_model %>%
   ggplot() +
   geom_line(aes(x=year, y=shootings, color = 'Actual Shootings')) +
@@ -311,20 +330,6 @@ combined_by_year_model %>%
   scale_color_manual(values = legend_colors) + theme(plot.title = element_text(hjust = 0.5, vjust = 1))
 
 ```
-
-## Bias
-
-There are several areas where potential bias in the dataset may exist.
-
-**Data Collection Bias**
-Since the data is collected by the City of New York, over time some of the data that was collected one year may not be collected another year. Human errors during data entry are a possible source of inaccuracy.
-
-**Demographic Bias**
-There is a large amount of missing data for perpetrator demographic information such as age, sex, and race. The lack of data may introduce demographic bias and limit the accuracy of any conclusions regarding perpetrators.
-
-**Statistical Murder Flag**
-Based on the dataset footnotes STATISTICAL_MURDER_FLAG are shootings that resulted in the victim’s death which would be counted as a murder. However, the dataset classification is not a legal determination of murder or a guilty verdict. 
-
 
 ## Conclusion
 
@@ -345,6 +350,17 @@ The dataset shows a decrease in the number of shootings between 2016 and 2019, w
 **Predictive Modeling**
 Based on the linear regression models to predict shooting and murder numbers, both outcomes are projected to decline over time. The model for shootings was found to be statistically significant which is supported by a low p-value, implying that it can reliably predict future trends. In contrast, the model for predicting murders had a higher p-value and is therefore not statistically significant and may not reliably predict future trends.
 
+## Bias
 
+There are several areas where potential bias in the dataset may exist.
+
+**Data Collection Bias**
+Since the data is collected by the City of New York, over time some of the data that was collected one year may not be collected another year. Human errors during data entry are a possible source of inaccuracy.
+
+**Demographic Bias**
+There is a large amount of missing data for perpetrator demographic information such as age, sex, and race. The lack of data may introduce demographic bias and limit the accuracy of any conclusions regarding perpetrators.
+
+**Statistical Murder Flag**
+Based on the dataset footnotes STATISTICAL_MURDER_FLAG are shootings that resulted in the victim’s death which would be counted as a murder. However, the dataset classification is not a legal determination of murder or a guilty verdict.
  
 
